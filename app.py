@@ -5,6 +5,7 @@ import os
 import subprocess
 import webbrowser
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template, request
 from dotenv import load_dotenv
@@ -155,13 +156,34 @@ def fetch_google_sheet_rows():
 
 
 def detect_brave_browser():
+    env_path = os.getenv("BRAVE_PATH", "").strip()
+    if env_path and os.path.exists(env_path):
+        return env_path
+
     candidates = [
+        env_path,
         r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
         r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
         os.path.expanduser(r"~\AppData\Local\BraveSoftware\Brave-Browser\Application\brave.exe"),
     ]
     for candidate in candidates:
-        if os.path.exists(candidate):
+        if candidate and os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def detect_chrome_browser():
+    env_path = os.getenv("CHROME_PATH", "").strip()
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expanduser(r"~\AppData\Local\Google\Chrome\Application\chrome.exe"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
             return candidate
     return None
 
@@ -170,23 +192,37 @@ def open_url_in_browser(url: str, mode: str = "new_tab"):
     if not url:
         return False
 
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
     brave_path = detect_brave_browser()
     if brave_path:
-        if mode == "new_tab":
-            subprocess.Popen([brave_path, "--new-tab", url])
-        elif mode == "new_window":
-            subprocess.Popen([brave_path, "--new-window", url])
-        else:
-            subprocess.Popen([brave_path, url])
-        return True
+        try:
+            if mode == "new_tab":
+                subprocess.Popen([brave_path, "--new-tab", url])
+            elif mode == "new_window":
+                subprocess.Popen([brave_path, "--new-window", url])
+            else:
+                subprocess.Popen([brave_path, url])
+            return True
+        except Exception:
+            return False
 
-    if mode == "new_tab":
-        webbrowser.open_new_tab(url)
-    elif mode == "new_window":
-        webbrowser.open_new(url)
-    else:
-        webbrowser.open(url)
-    return True
+    chrome_path = detect_chrome_browser()
+    if chrome_path:
+        try:
+            if mode == "new_tab":
+                subprocess.Popen([chrome_path, "--new-tab", url])
+            elif mode == "new_window":
+                subprocess.Popen([chrome_path, "--new-window", url])
+            else:
+                subprocess.Popen([chrome_path, url])
+            return True
+        except Exception:
+            return False
+
+    return False
 
 
 @app.route("/")
@@ -222,10 +258,27 @@ def api_campaigns():
 def open_link():
     url = request.args.get("url", "")
     mode = request.args.get("mode", "new_tab")
-    success = open_url_in_browser(url, mode)
-    if not success:
+    if not url:
         return jsonify({"status": "error", "message": "No valid URL provided."}), 400
-    return jsonify({"status": "ok", "url": url, "mode": mode})
+
+    brave_path = detect_brave_browser()
+    if brave_path:
+        success = open_url_in_browser(url, mode)
+        if not success:
+            return jsonify({"status": "error", "message": "Failed to open Brave."}), 500
+        return jsonify({"status": "ok", "url": url, "mode": mode, "browser": "brave"})
+
+    chrome_path = detect_chrome_browser()
+    if chrome_path:
+        return jsonify({
+            "status": "needs_browser_choice",
+            "message": "Brave was not found. Open this link in Chrome instead?",
+            "url": url,
+            "mode": mode,
+            "browser": "chrome",
+        })
+
+    return jsonify({"status": "error", "message": "Brave and Chrome were not found on this machine."}), 404
 
 
 if __name__ == "__main__":

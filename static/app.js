@@ -179,13 +179,28 @@ async function openCampaign(link) {
   try {
     const response = await fetch(`/open?url=${encodeURIComponent(link)}&mode=${encodeURIComponent(currentMode)}`);
     const result = await response.json();
+
     if (result.status === 'ok') {
       showToast('Opened in Brave');
-    } else {
-      showToast('Could not open the link.');
+      return;
     }
+
+    if (result.status === 'needs_browser_choice') {
+      const shouldOpenChrome = window.confirm('Brave was not found. Open this link in Chrome instead?');
+      if (shouldOpenChrome) {
+        const chromeWindow = window.open(result.url, '_blank', 'noopener,noreferrer');
+        if (chromeWindow) {
+          showToast('Opened in Chrome');
+        } else {
+          showToast('Popup blocked. Please allow popups to open Chrome.');
+        }
+      }
+      return;
+    }
+
+    showToast('Could not open the link.');
   } catch (error) {
-    showToast('Browser request failed.');
+    showToast('Browser launch request failed.');
   }
 }
 
