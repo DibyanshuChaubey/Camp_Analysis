@@ -267,12 +267,11 @@ def open_link():
         return jsonify({"status": "error", "message": "No valid URL provided."}), 400
 
     host = request.host.lower()
-    is_local = "localhost" in host or "127.0.0.1" in host or "0.0.0.0" in host or host.startswith("127.")
+    is_local = "localhost" in host or "127.0.0.1" in host or "0.0.0.0" in host or host.startswith("127.") or host.startswith("192.168.") or host.startswith("10.") or host.startswith("172.")
 
     if not is_local:
         return jsonify({
             "status": "browser_only",
-            "message": "Remote deployment cannot launch a desktop browser. Opening in the current browser tab instead.",
             "url": url,
             "mode": mode,
             "browser": "browser_only",
