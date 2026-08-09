@@ -266,6 +266,18 @@ def open_link():
     if not url:
         return jsonify({"status": "error", "message": "No valid URL provided."}), 400
 
+    host = request.host.lower()
+    is_local = "localhost" in host or "127.0.0.1" in host or "0.0.0.0" in host or host.startswith("127.")
+
+    if not is_local:
+        return jsonify({
+            "status": "error",
+            "message": "This feature only works on the local machine where Brave is installed. Vercel cannot launch your desktop browser.",
+            "url": url,
+            "mode": mode,
+            "browser": "blocked_for_deployed_app",
+        }), 403
+
     brave_path = detect_brave_browser()
     if brave_path:
         success = open_url_in_browser(url, mode)

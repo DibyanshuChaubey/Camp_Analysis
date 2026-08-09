@@ -222,6 +222,11 @@ async function openCampaign(link) {
       return;
     }
 
+    if (result.status === 'error' && result.message) {
+      showToast(result.message);
+      return;
+    }
+
     showToast('Could not open the link.');
   } catch (error) {
     showToast('Browser launch request failed.');
