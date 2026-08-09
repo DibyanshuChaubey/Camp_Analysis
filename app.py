@@ -1,3 +1,4 @@
+import base64
 import datetime as dt
 import json
 import os
@@ -25,6 +26,7 @@ if SERVICE_ACCOUNT_PATH and not SERVICE_ACCOUNT_PATH.is_absolute():
     SERVICE_ACCOUNT_PATH = (BASE_DIR / SERVICE_ACCOUNT_PATH).resolve()
 
 SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+SERVICE_ACCOUNT_JSON_BASE64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON_BASE64", "").strip()
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "").strip()
 SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE", "").strip()
 
@@ -69,19 +71,45 @@ def fetch_google_sheet_rows_for_tab(service, tab_name):
     return normalize_rows(values)
 
 
+def parse_service_account_json(raw_value: str):
+    if not raw_value:
+        return None
+
+    candidate = raw_value.strip()
+    if candidate.startswith("{"):
+        return json.loads(candidate)
+
+    try:
+        decoded = base64.b64decode(candidate, validate=True)
+        return json.loads(decoded.decode("utf-8"))
+    except Exception:
+        try:
+            return json.loads(candidate)
+        except Exception:
+            return None
+
+
 def build_google_credentials():
     if service_account is None or build is None:
         raise ImportError("Google client dependencies are not installed.")
 
-    if SERVICE_ACCOUNT_JSON:
+    candidate_info = parse_service_account_json(SERVICE_ACCOUNT_JSON)
+    if candidate_info:
+        return service_account.Credentials.from_service_account_info(
+            candidate_info,
+            scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
+        )
+
+    if SERVICE_ACCOUNT_JSON_BASE64:
         try:
-            info = json.loads(SERVICE_ACCOUNT_JSON)
+            decoded = base64.b64decode(SERVICE_ACCOUNT_JSON_BASE64, validate=True)
+            info = json.loads(decoded.decode("utf-8"))
             return service_account.Credentials.from_service_account_info(
                 info,
                 scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
             )
         except Exception as exc:
-            raise ValueError(f"GOOGLE_SERVICE_ACCOUNT_JSON is invalid: {exc}") from exc
+            raise ValueError(f"GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 is invalid: {exc}") from exc
 
     if SERVICE_ACCOUNT_PATH and SERVICE_ACCOUNT_PATH.exists():
         return service_account.Credentials.from_service_account_file(
@@ -89,7 +117,7 @@ def build_google_credentials():
             scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
         )
 
-    raise FileNotFoundError("No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH.")
+    raise FileNotFoundError("No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 or GOOGLE_SERVICE_ACCOUNT_PATH.")
 
 
 def fetch_google_sheet_rows():
@@ -168,8 +196,12 @@ def index():
 
 @app.route("/api/campaigns")
 def api_campaigns():
-    if not SHEET_ID or (not SERVICE_ACCOUNT_JSON and (not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists())):
-        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
+    if not SHEET_ID:
+        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "GOOGLE_SHEET_ID is not configured.", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
+
+    credentials_missing = not SERVICE_ACCOUNT_JSON and not SERVICE_ACCOUNT_JSON_BASE64 and (not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists())
+    if credentials_missing:
+        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 or GOOGLE_SERVICE_ACCOUNT_PATH.", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
 
     try:
         payload = fetch_google_sheet_rows()
