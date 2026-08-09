@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campaign Link Hub</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ERA-Campaign operations</p>
+          <h1>Campaign Link Hub</h1>
+        </div>
+        <div class="status-box">
+          <span class="dot"></span>
+          <span id="sourceLabel">Loading...</span>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="toolbar card">
+          <div class="search-box">
+            <label for="searchInput">Search campaign</label>
+            <input id="searchInput" type="text" placeholder="Type campaign name..." />
+          </div>
+
+          <div class="mode-box">
+            <label>Open mode</label>
+            <div class="mode-toggle">
+              <button class="mode-btn active" data-mode="new_tab">New tab</button>
+              <button class="mode-btn" data-mode="same_tab">Same tab</button>
+              <button class="mode-btn" data-mode="new_window">New window</button>
+            </div>
+          </div>
+
+          <button id="refreshBtn" class="secondary-btn">Refresh</button>
+        </section>
+
+        <section id="categoryTabs" class="category-tabs card"></section>
+
+        <section class="summary-row">
+          <div class="card stat-card">
+            <p>Total campaigns</p>
+            <h3 id="campaignCount">0</h3>
+          </div>
+          <div class="card stat-card">
+            <p>Last updated</p>
+            <h3 id="lastUpdated">--</h3>
+          </div>
+          <div class="card stat-card">
+            <p>Selected</p>
+            <h3 id="selectedCount">0</h3>
+          </div>
+        </section>
+
+        <section class="card table-card">
+          <div class="table-header">
+            <h2>Campaign list</h2>
+            <div class="table-actions">
+              <button id="copyBtn" class="secondary-btn">Copy link</button>
+              <button id="openBtn" class="primary-btn">Open in Brave</button>
+            </div>
+          </div>
+
+          <div class="selection-order-box card-soft">
+            <div class="selection-header">
+              <strong>Selection order</strong>
+              <button id="clearSelectionBtn" class="mini-btn">Clear</button>
+            </div>
+            <ol id="selectionOrderList" class="selection-order-list">
+              <li class="empty-state">No campaigns selected yet.</li>
+            </ol>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Campaign Name</th>
+                  <th>Link</th>
+                </tr>
+              </thead>
+              <tbody id="campaignTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>

@@ -1,0 +1,268 @@
+let campaigns = [];
+let categories = [];
+let selectedCampaign = null;
+let selectedCampaigns = [];
+let currentMode = 'new_tab';
+let currentCategory = 'All';
+let searchTerm = '';
+
+const searchInput = document.getElementById('searchInput');
+const tableBody = document.getElementById('campaignTableBody');
+const sourceLabel = document.getElementById('sourceLabel');
+const campaignCount = document.getElementById('campaignCount');
+const lastUpdated = document.getElementById('lastUpdated');
+const selectedCount = document.getElementById('selectedCount');
+const openBtn = document.getElementById('openBtn');
+const copyBtn = document.getElementById('copyBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+const selectionOrderList = document.getElementById('selectionOrderList');
+const categoryTabs = document.getElementById('categoryTabs');
+const modeButtons = [...document.querySelectorAll('.mode-btn')];
+
+function showToast(message) {
+  let toast = document.querySelector('.status-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'status-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(showToast.timer);
+  showToast.timer = setTimeout(() => toast.classList.remove('show'), 1800);
+}
+
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderSelectionOrder() {
+  if (!selectedCampaigns.length) {
+    selectionOrderList.innerHTML = '<li class="empty-state">No campaigns selected yet.</li>';
+    return;
+  }
+
+  selectionOrderList.innerHTML = selectedCampaigns
+    .map((campaign, index) => `<li>${index + 1}. ${escapeHtml(campaign.name)}</li>`)
+    .join('');
+}
+
+function renderCategoryTabs() {
+  if (!categories.length) {
+    categoryTabs.innerHTML = '';
+    return;
+  }
+
+  const categoryNames = categories.map((category) => category.name);
+  const tabs = ['All', ...categoryNames.filter((name) => name !== 'All')];
+
+  categoryTabs.innerHTML = tabs
+    .map((name) => `
+      <button class="category-tab ${name === currentCategory ? 'active' : ''}" data-category="${escapeHtml(name)}">
+        ${escapeHtml(name)}
+      </button>
+    `)
+    .join('');
+
+  categoryTabs.querySelectorAll('.category-tab').forEach((button) => {
+    button.addEventListener('click', () => {
+      currentCategory = button.dataset.category;
+      renderCategoryTabs();
+      renderTable();
+    });
+  });
+}
+
+function getVisibleCampaigns() {
+  let source = campaigns;
+  if (currentCategory !== 'All') {
+    const chosen = categories.find((category) => category.name === currentCategory);
+    source = chosen ? chosen.campaigns : [];
+  }
+
+  return source.filter((item) => {
+    if (!searchTerm) return true;
+    return item.name.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+}
+
+function renderTable() {
+  const filtered = getVisibleCampaigns();
+
+  selectedCount.textContent = String(filtered.length);
+  tableBody.innerHTML = '';
+
+  filtered.forEach((campaign, index) => {
+    const row = document.createElement('tr');
+    const isSelected = selectedCampaigns.some((item) => item.link === campaign.link);
+    if (isSelected) {
+      row.classList.add('selected');
+    }
+
+    row.innerHTML = `
+      <td>${index + 1}</td>
+      <td>${escapeHtml(campaign.name)}</td>
+      <td class="link-cell">${escapeHtml(campaign.link)}</td>
+    `;
+
+    row.addEventListener('click', (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        toggleCampaignSelection(campaign);
+        return;
+      }
+
+      selectedCampaign = campaign;
+      if (!selectedCampaigns.some((item) => item.link === campaign.link)) {
+        selectedCampaigns.push(campaign);
+      }
+      renderTable();
+      renderSelectionOrder();
+    });
+
+    row.addEventListener('dblclick', () => openCampaign(campaign.link));
+    tableBody.appendChild(row);
+  });
+}
+
+async function fetchCampaigns() {
+  try {
+    const response = await fetch('/api/campaigns');
+    const data = await response.json();
+
+    const incomingCategories = data.categories || [];
+    categories = incomingCategories.length ? incomingCategories : [{ name: 'All', campaigns: data.campaigns || [] }];
+    campaigns = data.campaigns || [];
+
+    if (!categories.some((category) => category.name === currentCategory)) {
+      currentCategory = 'All';
+    }
+
+    sourceLabel.textContent = data.source === 'google_sheets' ? 'Live Camps Link' : 'Data Unavailable';
+    campaignCount.textContent = String(campaigns.length);
+    lastUpdated.textContent = data.updated_at || '--';
+    renderCategoryTabs();
+    renderTable();
+  } catch (error) {
+    sourceLabel.textContent = 'Load failed';
+    showToast('Could not refresh campaign data.');
+  }
+}
+
+function toggleCampaignSelection(campaign) {
+  const existingIndex = selectedCampaigns.findIndex((item) => item.link === campaign.link);
+  if (existingIndex >= 0) {
+    selectedCampaigns.splice(existingIndex, 1);
+    if (selectedCampaign && selectedCampaign.link === campaign.link) {
+      selectedCampaign = selectedCampaigns[selectedCampaigns.length - 1] || null;
+    }
+  } else {
+    selectedCampaigns.push(campaign);
+    selectedCampaign = campaign;
+  }
+
+  renderTable();
+  renderSelectionOrder();
+}
+
+async function openCampaign(link) {
+  if (!link) {
+    showToast('No link available for this campaign.');
+    return;
+  }
+
+  try {
+    const response = await fetch(`/open?url=${encodeURIComponent(link)}&mode=${encodeURIComponent(currentMode)}`);
+    const result = await response.json();
+    if (result.status === 'ok') {
+      showToast('Opened in Brave');
+    } else {
+      showToast('Could not open the link.');
+    }
+  } catch (error) {
+    showToast('Browser request failed.');
+  }
+}
+
+async function openSelectedCampaignsInOrder() {
+  if (!selectedCampaigns.length) {
+    showToast('Select campaigns first.');
+    return;
+  }
+
+  for (const campaign of selectedCampaigns) {
+    await openCampaign(campaign.link);
+  }
+}
+
+async function copySelectedLink() {
+  const target = selectedCampaign || (selectedCampaigns[selectedCampaigns.length - 1] || null);
+  if (!target) {
+    showToast('Select a campaign first.');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(target.link);
+    showToast('Link copied to clipboard.');
+  } catch (error) {
+    showToast('Clipboard access blocked by the browser.');
+  }
+}
+
+searchInput.addEventListener('input', (event) => {
+  searchTerm = event.target.value.trim();
+  renderTable();
+});
+
+modeButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    currentMode = button.dataset.mode;
+    modeButtons.forEach((btn) => btn.classList.toggle('active', btn === button));
+  });
+});
+
+openBtn.addEventListener('click', () => {
+  if (!selectedCampaigns.length) {
+    showToast('Choose campaigns first.');
+    return;
+  }
+
+  if (selectedCampaigns.length === 1) {
+    openCampaign(selectedCampaigns[0].link);
+    return;
+  }
+
+  openSelectedCampaignsInOrder();
+});
+
+copyBtn.addEventListener('click', () => {
+  const target = selectedCampaign || (selectedCampaigns[selectedCampaigns.length - 1] || null);
+  if (!target) {
+    showToast('Select a campaign first.');
+    return;
+  }
+  navigator.clipboard.writeText(target.link).then(() => {
+    showToast('Link copied to clipboard.');
+  }).catch(() => {
+    showToast('Clipboard access blocked by the browser.');
+  });
+});
+
+clearSelectionBtn.addEventListener('click', () => {
+  selectedCampaigns = [];
+  selectedCampaign = null;
+  renderTable();
+  renderSelectionOrder();
+});
+
+refreshBtn.addEventListener('click', fetchCampaigns);
+
+fetchCampaigns();
+renderSelectionOrder();
+setInterval(fetchCampaigns, 30000);
