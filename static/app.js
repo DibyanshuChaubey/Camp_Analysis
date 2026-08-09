@@ -206,11 +206,11 @@ function openInCurrentBrowser(link, mode) {
   }
 
   const popup = window.open(link, '_blank', mode === 'new_window' ? 'noopener,noreferrer,width=1200,height=800' : 'noopener,noreferrer');
-  if (!popup) {
-    showToast('Popup blocked. Please allow popups for this site.');
-    return false;
+  if (popup) {
+    return true;
   }
 
+  window.location.href = link;
   return true;
 }
 
