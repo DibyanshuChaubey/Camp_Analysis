@@ -34,6 +34,10 @@ SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE", "").strip()
 app = Flask(__name__)
 
 
+def iso_now():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def normalize_rows(rows):
     normalized = []
     if not rows:
@@ -232,24 +236,25 @@ def index():
 
 @app.route("/api/campaigns")
 def api_campaigns():
+    now = iso_now()
     if not SHEET_ID:
-        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "GOOGLE_SHEET_ID is not configured.", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
+        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "GOOGLE_SHEET_ID is not configured.", "updated_at": now}), 503
 
     credentials_missing = not SERVICE_ACCOUNT_JSON and not SERVICE_ACCOUNT_JSON_BASE64 and (not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists())
     if credentials_missing:
-        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 or GOOGLE_SERVICE_ACCOUNT_PATH.", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
+        return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "error": "No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_JSON_BASE64 or GOOGLE_SERVICE_ACCOUNT_PATH.", "updated_at": now}), 503
 
     try:
         payload = fetch_google_sheet_rows()
     except Exception as exc:
-        return jsonify({"categories": [], "campaigns": [], "source": "google_sheets_error", "error": str(exc), "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 500
+        return jsonify({"categories": [], "campaigns": [], "source": "google_sheets_error", "error": str(exc), "updated_at": now}), 500
 
     return jsonify(
         {
             "categories": payload.get("categories", []),
             "campaigns": payload.get("flat", []),
             "source": "google_sheets",
-            "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": iso_now(),
         }
     )
 

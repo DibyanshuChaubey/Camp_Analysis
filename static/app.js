@@ -42,6 +42,30 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
+function formatUpdatedAt(value) {
+  if (!value) return '--';
+
+  let parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    parsed = new Date(value.replace(' ', 'T'));
+  }
+
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString('en-US', {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+}
+
 function renderSelectionOrder() {
   if (!selectedCampaigns.length) {
     selectionOrderList.innerHTML = '<li class="empty-state">No campaigns selected yet.</li>';
@@ -145,7 +169,7 @@ async function fetchCampaigns() {
 
     sourceLabel.textContent = data.source === 'google_sheets' ? 'Live Camps Link' : 'Data Unavailable';
     campaignCount.textContent = String(campaigns.length);
-    lastUpdated.textContent = data.updated_at || '--';
+    lastUpdated.textContent = formatUpdatedAt(data.updated_at);
     renderCategoryTabs();
     renderTable();
   } catch (error) {
