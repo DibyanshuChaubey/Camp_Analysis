@@ -194,35 +194,49 @@ function toggleCampaignSelection(campaign) {
   renderSelectionOrder();
 }
 
+function normalizeLink(link) {
+  if (typeof link !== 'string') {
+    return '';
+  }
+  return link.trim();
+}
+
 function openInCurrentBrowser(link, mode) {
-  if (!link) {
+  const safeLink = normalizeLink(link);
+  if (!safeLink) {
     showToast('No link available for this campaign.');
     return false;
   }
 
   if (mode === 'same_tab') {
-    window.location.href = link;
+    window.location.href = safeLink;
     return true;
   }
 
-  const popup = window.open(link, '_blank', mode === 'new_window' ? 'noopener,noreferrer,width=1200,height=800' : 'noopener,noreferrer');
+  const popup = window.open(
+    safeLink,
+    '_blank',
+    mode === 'new_window' ? 'noopener,noreferrer,width=1200,height=800' : 'noopener,noreferrer'
+  );
+
   if (popup) {
     return true;
   }
 
-  window.location.href = link;
+  window.location.href = safeLink;
   return true;
 }
 
 async function openCampaign(link) {
-  if (!link) {
+  const safeLink = normalizeLink(link);
+  if (!safeLink) {
     showToast('No link available for this campaign.');
     return;
   }
 
-  const isLocal = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname) || window.location.hostname.startsWith('127.');
+  const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(window.location.hostname) || window.location.hostname.startsWith('127.');
   if (!isLocal) {
-    const opened = openInCurrentBrowser(link, currentMode);
+    const opened = openInCurrentBrowser(safeLink, currentMode);
     if (opened) {
       const label = currentMode === 'same_tab' ? 'same tab' : currentMode === 'new_window' ? 'new window' : 'new tab';
       showToast(`Opened in ${label}`);
@@ -231,7 +245,7 @@ async function openCampaign(link) {
   }
 
   try {
-    const response = await fetch(`/open?url=${encodeURIComponent(link)}&mode=${encodeURIComponent(currentMode)}`);
+    const response = await fetch(`/open?url=${encodeURIComponent(safeLink)}&mode=${encodeURIComponent(currentMode)}`);
     const result = await response.json();
 
     if (result.status === 'ok') {
@@ -240,7 +254,7 @@ async function openCampaign(link) {
     }
 
     if (result.status === 'browser_only') {
-      const opened = openInCurrentBrowser(link, currentMode);
+      const opened = openInCurrentBrowser(safeLink, currentMode);
       if (opened) {
         const label = currentMode === 'same_tab' ? 'same tab' : currentMode === 'new_window' ? 'new window' : 'new tab';
         showToast(`Opened in ${label}`);
@@ -278,23 +292,38 @@ async function openSelectedCampaignsInOrder() {
     return;
   }
 
-  if (currentMode === 'same_tab') {
-    if (selectedCampaigns.length > 1) {
-      showToast('Same-tab mode opens only one campaign at a time.');
-      return;
-    }
+  const validLinks = selectedCampaigns
+    .map((campaign) => normalizeLink(campaign.link))
+    .filter(Boolean)
+    .filter((link, index, list) => list.indexOf(link) === index);
 
-    openCampaign(selectedCampaigns[0].link);
+  if (!validLinks.length) {
+    showToast('No valid links to open.');
     return;
   }
 
-  for (const campaign of selectedCampaigns) {
-    const opened = openInCurrentBrowser(campaign.link, currentMode);
-    if (!opened) {
-      showToast('Popup blocked. Please allow popups for this site.');
-      break;
-    }
+  if (currentMode === 'same_tab') {
+    openCampaign(validLinks[0]);
+    return;
   }
+
+  const first = validLinks[0];
+  const rest = validLinks.slice(1);
+
+  const firstOpened = openInCurrentBrowser(first, currentMode);
+  if (!firstOpened) {
+    showToast('Popup blocked. Please allow popups for this site.');
+    return;
+  }
+
+  rest.forEach((link, index) => {
+    setTimeout(() => {
+      const opened = openInCurrentBrowser(link, currentMode);
+      if (!opened && index === rest.length - 1) {
+        showToast('Popup blocked. Please allow popups for this site.');
+      }
+    }, 150 * (index + 1));
+  });
 }
 
 async function copySelectedLink() {
@@ -331,7 +360,8 @@ openBtn.addEventListener('click', () => {
   }
 
   if (selectedCampaigns.length === 1 || currentMode === 'same_tab') {
-    openCampaign(selectedCampaigns[0].link);
+    const target = selectedCampaigns[selectedCampaigns.length - 1] || selectedCampaigns[0];
+    openCampaign(target.link);
     return;
   }
 
