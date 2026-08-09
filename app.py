@@ -1,4 +1,5 @@
 import datetime as dt
+import json
 import os
 import subprocess
 import webbrowser
@@ -23,6 +24,7 @@ SERVICE_ACCOUNT_PATH = Path(SERVICE_ACCOUNT_PATH_VALUE).expanduser() if SERVICE_
 if SERVICE_ACCOUNT_PATH and not SERVICE_ACCOUNT_PATH.is_absolute():
     SERVICE_ACCOUNT_PATH = (BASE_DIR / SERVICE_ACCOUNT_PATH).resolve()
 
+SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
 SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "").strip()
 SHEET_RANGE = os.getenv("GOOGLE_SHEET_RANGE", "").strip()
 
@@ -67,20 +69,34 @@ def fetch_google_sheet_rows_for_tab(service, tab_name):
     return normalize_rows(values)
 
 
-def fetch_google_sheet_rows():
+def build_google_credentials():
     if service_account is None or build is None:
         raise ImportError("Google client dependencies are not installed.")
 
+    if SERVICE_ACCOUNT_JSON:
+        try:
+            info = json.loads(SERVICE_ACCOUNT_JSON)
+            return service_account.Credentials.from_service_account_info(
+                info,
+                scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
+            )
+        except Exception as exc:
+            raise ValueError(f"GOOGLE_SERVICE_ACCOUNT_JSON is invalid: {exc}") from exc
+
+    if SERVICE_ACCOUNT_PATH and SERVICE_ACCOUNT_PATH.exists():
+        return service_account.Credentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_PATH),
+            scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
+        )
+
+    raise FileNotFoundError("No valid Google service account credentials found. Set GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SERVICE_ACCOUNT_PATH.")
+
+
+def fetch_google_sheet_rows():
     if not SHEET_ID:
         raise ValueError("GOOGLE_SHEET_ID is not set. Add it to your environment variables.")
 
-    if not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists():
-        raise FileNotFoundError("GOOGLE_SERVICE_ACCOUNT_PATH is missing or invalid. Point it to your service account JSON file.")
-
-    creds = service_account.Credentials.from_service_account_file(
-        str(SERVICE_ACCOUNT_PATH),
-        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
-    )
+    creds = build_google_credentials()
 
     service = build("sheets", "v4", credentials=creds, cache_discovery=False)
 
@@ -152,7 +168,7 @@ def index():
 
 @app.route("/api/campaigns")
 def api_campaigns():
-    if not SHEET_ID or not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists():
+    if not SHEET_ID or (not SERVICE_ACCOUNT_JSON and (not SERVICE_ACCOUNT_PATH or not SERVICE_ACCOUNT_PATH.exists())):
         return jsonify({"categories": [], "campaigns": [], "source": "missing_credentials", "updated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}), 503
 
     try:
