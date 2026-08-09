@@ -278,8 +278,22 @@ async function openSelectedCampaignsInOrder() {
     return;
   }
 
+  if (currentMode === 'same_tab') {
+    if (selectedCampaigns.length > 1) {
+      showToast('Same-tab mode opens only one campaign at a time.');
+      return;
+    }
+
+    openCampaign(selectedCampaigns[0].link);
+    return;
+  }
+
   for (const campaign of selectedCampaigns) {
-    await openCampaign(campaign.link);
+    const opened = openInCurrentBrowser(campaign.link, currentMode);
+    if (!opened) {
+      showToast('Popup blocked. Please allow popups for this site.');
+      break;
+    }
   }
 }
 
@@ -316,7 +330,7 @@ openBtn.addEventListener('click', () => {
     return;
   }
 
-  if (selectedCampaigns.length === 1) {
+  if (selectedCampaigns.length === 1 || currentMode === 'same_tab') {
     openCampaign(selectedCampaigns[0].link);
     return;
   }
