@@ -194,9 +194,39 @@ function toggleCampaignSelection(campaign) {
   renderSelectionOrder();
 }
 
+function openInCurrentBrowser(link, mode) {
+  if (!link) {
+    showToast('No link available for this campaign.');
+    return false;
+  }
+
+  if (mode === 'same_tab') {
+    window.location.href = link;
+    return true;
+  }
+
+  const popup = window.open(link, '_blank', mode === 'new_window' ? 'noopener,noreferrer,width=1200,height=800' : 'noopener,noreferrer');
+  if (!popup) {
+    showToast('Popup blocked. Please allow popups for this site.');
+    return false;
+  }
+
+  return true;
+}
+
 async function openCampaign(link) {
   if (!link) {
     showToast('No link available for this campaign.');
+    return;
+  }
+
+  const isLocal = ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname) || window.location.hostname.startsWith('127.');
+  if (!isLocal) {
+    const opened = openInCurrentBrowser(link, currentMode);
+    if (opened) {
+      const label = currentMode === 'same_tab' ? 'same tab' : currentMode === 'new_window' ? 'new window' : 'new tab';
+      showToast(`Opened in ${label}`);
+    }
     return;
   }
 
@@ -206,6 +236,15 @@ async function openCampaign(link) {
 
     if (result.status === 'ok') {
       showToast('Opened in Brave');
+      return;
+    }
+
+    if (result.status === 'browser_only') {
+      const opened = openInCurrentBrowser(link, currentMode);
+      if (opened) {
+        const label = currentMode === 'same_tab' ? 'same tab' : currentMode === 'new_window' ? 'new window' : 'new tab';
+        showToast(`Opened in ${label}`);
+      }
       return;
     }
 

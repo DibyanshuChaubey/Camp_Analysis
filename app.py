@@ -271,12 +271,12 @@ def open_link():
 
     if not is_local:
         return jsonify({
-            "status": "error",
-            "message": "This feature only works on the local machine where Brave is installed. Vercel cannot launch your desktop browser.",
+            "status": "browser_only",
+            "message": "Remote deployment cannot launch a desktop browser. Opening in the current browser tab instead.",
             "url": url,
             "mode": mode,
-            "browser": "blocked_for_deployed_app",
-        }), 403
+            "browser": "browser_only",
+        })
 
     brave_path = detect_brave_browser()
     if brave_path:
