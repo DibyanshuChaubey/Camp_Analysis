@@ -307,23 +307,45 @@ async function openSelectedCampaignsInOrder() {
     return;
   }
 
-  const first = validLinks[0];
-  const rest = validLinks.slice(1);
+  const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(window.location.hostname) || window.location.hostname.startsWith('127.');
 
-  const firstOpened = openInCurrentBrowser(first, currentMode);
-  if (!firstOpened) {
-    showToast('Popup blocked. Please allow popups for this site.');
+  if (isLocal) {
+    // When running locally, ask the server to open links (server will try to open Brave/Chrome).
+    // Do this sequentially so the server has time to launch each URL.
+    for (const link of validLinks) {
+      try {
+        const response = await fetch(`/open?url=${encodeURIComponent(link)}&mode=${encodeURIComponent(currentMode)}`);
+        const result = await response.json();
+        if (result.status === 'ok') {
+          showToast('Opened in Brave');
+        } else if (result.status === 'browser_only' || result.status === 'needs_browser_choice') {
+          // Fallback to opening in the current browser when server cannot open a native browser.
+          const opened = openInCurrentBrowser(link, currentMode);
+          if (opened) {
+            const label = currentMode === 'same_tab' ? 'same tab' : currentMode === 'new_window' ? 'new window' : 'new tab';
+            showToast(`Opened in ${label}`);
+          }
+        } else if (result.status === 'error' && result.message) {
+          showToast(result.message);
+        }
+      } catch (err) {
+        showToast('Browser launch request failed.');
+      }
+    }
     return;
   }
 
-  rest.forEach((link, index) => {
-    setTimeout(() => {
-      const opened = openInCurrentBrowser(link, currentMode);
-      if (!opened && index === rest.length - 1) {
-        showToast('Popup blocked. Please allow popups for this site.');
-      }
-    }, 150 * (index + 1));
-  });
+  // When deployed remotely (e.g., Vercel) open windows/tabs directly in the user's browser.
+  // Open synchronously in the user gesture to avoid popup blocking.
+  let anyOpened = false;
+  for (const link of validLinks) {
+    const opened = openInCurrentBrowser(link, currentMode);
+    anyOpened = anyOpened || !!opened;
+  }
+
+  if (!anyOpened) {
+    showToast('Popup blocked. Please allow popups for this site.');
+  }
 }
 
 async function copySelectedLink() {
