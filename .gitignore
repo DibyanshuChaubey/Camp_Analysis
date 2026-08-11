@@ -16,10 +16,13 @@ service_account.json
 *.pem
 *.key
 
+*.secret
+
 # OS/editor files
 .DS_Store
 Thumbs.db
 .vscode/
+/.idea/
 
 # Deployment artifacts if any
 *.log

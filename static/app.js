@@ -119,7 +119,8 @@ function getVisibleCampaigns() {
 function renderTable() {
   const filtered = getVisibleCampaigns();
 
-  selectedCount.textContent = String(filtered.length);
+  // Number of campaigns selected by the user (preserve selection order)
+  selectedCount.textContent = String(selectedCampaigns.length);
   tableBody.innerHTML = '';
 
   filtered.forEach((campaign, index) => {
